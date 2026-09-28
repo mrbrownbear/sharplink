@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import hashlib
 import html
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import mimetypes
 import re
@@ -47,10 +48,10 @@ def enqueue(url, base=ORIGIN + "/"):
 
 def fetch(url):
     last = None
-    for attempt in range(4):
+    for attempt in range(2):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "*/*"})
-            with urllib.request.urlopen(req, timeout=45) as response:
+            with urllib.request.urlopen(req, timeout=12) as response:
                 return response.geturl(), response.headers, response.read()
         except Exception as exc:
             last = exc
@@ -94,26 +95,38 @@ def discover(text, base):
     for match in LOCAL_URL.finditer(text):
         enqueue(html.unescape(match.group(1).rstrip(";,]}")), base)
 
+def process_one(url):
+    try:
+        final_url, headers, data = fetch(url)
+        ctype = headers.get("Content-Type", "")
+        path = output_path(url, ctype)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+        return url, final_url, ctype, path, data, None
+    except Exception as exc:
+        return url, None, None, None, None, exc
+
 def crawl():
     for route in ROUTES:
         enqueue(ORIGIN + route)
     while queue:
-        url = queue.pop(0)
-        try:
-            final_url, headers, data = fetch(url)
-            ctype = headers.get("Content-Type", "")
-            path = output_path(url, ctype)
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(data)
-            records[url] = {"path": "/" + path.as_posix(), "type": ctype}
-            if final_url != url:
-                records[final_url] = records[url]
-            if path.suffix.lower() in TEXT_EXTS or any(x in ctype for x in ("text/", "javascript", "json", "svg+xml", "xml")):
-                discover(data.decode("utf-8", errors="ignore"), final_url)
-            print("OK", url, "=>", path)
-        except Exception as exc:
-            failures.append({"url": url, "error": repr(exc)})
-            print("FAIL", url, repr(exc), file=sys.stderr)
+        batch = []
+        while queue and len(batch) < 24:
+            batch.append(queue.pop(0))
+        with ThreadPoolExecutor(max_workers=12) as pool:
+            futures = [pool.submit(process_one, url) for url in batch]
+            for future in as_completed(futures):
+                url, final_url, ctype, path, data, exc = future.result()
+                if exc is not None:
+                    failures.append({"url": url, "error": repr(exc)})
+                    print("FAIL", url, repr(exc), file=sys.stderr)
+                    continue
+                records[url] = {"path": "/" + path.as_posix(), "type": ctype}
+                if final_url != url:
+                    records[final_url] = records[url]
+                if path.suffix.lower() in TEXT_EXTS or any(x in ctype for x in ("text/", "javascript", "json", "svg+xml", "xml")):
+                    discover(data.decode("utf-8", errors="ignore"), final_url)
+                print("OK", url, "=>", path)
 
 def rewrite():
     pairs = {}
