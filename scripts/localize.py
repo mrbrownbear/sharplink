@@ -37,7 +37,27 @@ def should_fetch(url):
         return False
     if p.netloc == "www.sharplink.com":
         route = p.path.rstrip("/") or "/"
-        return route in ROUTES or p.path.startswith(LOCAL_PREFIXES)
+        if route in ROUTES:
+            return True
+        path = p.path.lower()
+        if path.startswith("/_nuxt/"):
+            return path.endswith((".js", ".css", ".json"))
+        if path.startswith("/_fonts/"):
+            return path.endswith((".woff", ".woff2"))
+        if path.startswith("/images/"):
+            return path.endswith((".avif", ".webp", ".png", ".jpg", ".jpeg", ".svg"))
+        if path.startswith("/svgs/"):
+            return path.endswith(".svg")
+        if path.startswith("/webgl/"):
+            return bool(Path(p.path).suffix)
+        if p.path == "/_vercel/image":
+            query = urllib.parse.parse_qs(p.query)
+            return bool(query.get("url"))
+        if path.startswith("/api/"):
+            return True
+        if path.startswith("/favicon"):
+            return True
+        return False
     if p.netloc in EXTERNAL_ASSET_HOSTS:
         path = p.path.lower()
         return path.startswith("/f/") and (
@@ -96,8 +116,8 @@ def output_path(url, content_type=""):
         return result
     return Path(str(result) + extension(content_type))
 
-ABS_URL = re.compile(r"https?://[^\\s\"'<>\\\\)]+")
-LOCAL_URL = re.compile(r"(?<![A-Za-z0-9])(/(?:_nuxt|_fonts|_vercel/image|images|svgs|webgl|api|favicon)[^\\s\"'<>\\\\)]*)")
+ABS_URL = re.compile(r"https?://[^\s\"'<>\\)]+")
+LOCAL_URL = re.compile(r"(?<![A-Za-z0-9])(/(?:_nuxt|_fonts|_vercel/image|images|svgs|webgl|api|favicon)[^\s\"'<>\\)]*)")
 
 def discover(text, base):
     for match in ABS_URL.finditer(text):
