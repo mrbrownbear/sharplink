@@ -38,7 +38,17 @@ def should_fetch(url):
     if p.netloc == "www.sharplink.com":
         route = p.path.rstrip("/") or "/"
         return route in ROUTES or p.path.startswith(LOCAL_PREFIXES)
-    return p.netloc in EXTERNAL_ASSET_HOSTS
+    if p.netloc in EXTERNAL_ASSET_HOSTS:
+        path = p.path.lower()
+        return path.startswith("/f/") and (
+            "/x/" in path or
+            any(path.endswith(ext) for ext in (
+                ".avif", ".webp", ".png", ".jpg", ".jpeg", ".svg",
+                ".webm", ".mp4", ".pdf", ".json", ".woff", ".woff2",
+                ".css", ".js"
+            ))
+        )
+    return False
 
 def enqueue(url, base=ORIGIN + "/"):
     u = normalize(url, base)
@@ -48,10 +58,10 @@ def enqueue(url, base=ORIGIN + "/"):
 
 def fetch(url):
     last = None
-    for attempt in range(2):
+    for attempt in range(1):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "*/*"})
-            with urllib.request.urlopen(req, timeout=12) as response:
+            with urllib.request.urlopen(req, timeout=8) as response:
                 return response.geturl(), response.headers, response.read()
         except Exception as exc:
             last = exc
@@ -111,9 +121,9 @@ def crawl():
         enqueue(ORIGIN + route)
     while queue:
         batch = []
-        while queue and len(batch) < 24:
+        while queue and len(batch) < 80:
             batch.append(queue.pop(0))
-        with ThreadPoolExecutor(max_workers=12) as pool:
+        with ThreadPoolExecutor(max_workers=24) as pool:
             futures = [pool.submit(process_one, url) for url in batch]
             for future in as_completed(futures):
                 url, final_url, ctype, path, data, exc = future.result()
