@@ -1,0 +1,53 @@
+name: Localize SharpLink
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - scripts/localize.py
+      - .github/workflows/localize.yml
+
+permissions:
+  contents: write
+
+jobs:
+  localize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Remove previous generated site
+        run: |
+          find . -mindepth 1 -maxdepth 1             ! -name .git             ! -name .github             ! -name scripts             ! -name README.md             -exec rm -rf {} +
+
+      - name: Localize public site
+        run: python3 scripts/localize.py
+
+      - name: Validate required output
+        run: |
+          test -f index.html
+          test -f about/index.html
+          test -f investors/index.html
+          test -f ethereum-opportunity/index.html
+          test -f __local/runtime-guard.js
+          test -f vercel.json
+          if grep -RIlE 'src=["'\'' ]*https://(www\.sharplink\.com|a\.storyblok\.com)|href=["'\'' ]*https://www\.sharplink\.com/(?:_nuxt|_fonts|images|svgs|webgl|api)' --include='*.html' .; then
+            echo "Runtime asset references still point to the source host"
+            exit 1
+          fi
+
+      - name: Commit localized build
+        run: |
+          git config user.name "sharplink-localizer"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No generated changes"
+            exit 0
+          fi
+          git commit -m "Localize SharpLink static site"
+          git push
