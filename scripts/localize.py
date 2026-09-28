@@ -53,6 +53,8 @@ def should_fetch(url):
         if p.path == "/_vercel/image":
             query = urllib.parse.parse_qs(p.query)
             return bool(query.get("url"))
+        if path == "/api/newsletter-submit":
+            return False
         if path.startswith("/api/"):
             return True
         if path.startswith("/favicon"):
@@ -121,9 +123,9 @@ LOCAL_URL = re.compile(r"(?<![A-Za-z0-9])(/(?:_nuxt|_fonts|_vercel/image|images|
 
 def discover(text, base):
     for match in ABS_URL.finditer(text):
-        enqueue(match.group(0).rstrip(";,]}"), base)
+        enqueue(match.group(0).rstrip(";,]}:`"), base)
     for match in LOCAL_URL.finditer(text):
-        enqueue(html.unescape(match.group(1).rstrip(";,]}")), base)
+        enqueue(html.unescape(match.group(1).rstrip(";,]}:`")), base)
 
 def process_one(url):
     try:
