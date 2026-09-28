@@ -9,6 +9,10 @@ on:
       - scripts/localize.py
       - .github/workflows/localize.yml
 
+concurrency:
+  group: sharplink-localize-main
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -35,7 +39,7 @@ jobs:
           test -f ethereum-opportunity/index.html
           test -f __local/runtime-guard.js
           test -f vercel.json
-          if grep -RIlE 'src=["'\'' ]*https://(www\.sharplink\.com|a\.storyblok\.com)|href=["'\'' ]*https://www\.sharplink\.com/(?:_nuxt|_fonts|images|svgs|webgl|api)' --include='*.html' .; then
+          if grep -RIlE 'src=["'\'' ]*https://(www\.sharplink\.com|a\.storyblok\.com)|href=["'\'' ]*https://www\.sharplink\.com/(_nuxt|_fonts|images|svgs|webgl|api)' --include='*.html' .; then
             echo "Runtime asset references still point to the source host"
             exit 1
           fi
